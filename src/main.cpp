@@ -1,7 +1,7 @@
 /*
 __   _____ ___ ___        Author: Vincent BESSON
  \ \ / /_ _| _ ) _ \      Release: 0.35
-  \ V / | || _ \   /      Date: 20221227
+  \ V / | || _ \   /      Date: 20231115
    \_/ |___|___/_|_\      Description: Power Consumption / Direct CLock Counter on the SAMD51
                 2022      Licence: Creative Commons
 ______________________
