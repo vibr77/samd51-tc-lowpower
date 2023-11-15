@@ -15,7 +15,6 @@ TC0 Count the pulse Pin 22
 TC5 Timer 32K ULP trigger after compare
 
 
-
 NOTE:
 -----
 Warning: RTCZERO has been changed to work with SAMD51, do not use the standard lib
@@ -30,20 +29,26 @@ WARNING: for stability Feather Mx SAMx1 without crystal for RTC zero are unstabl
 // Adafruit Feather M4: Count input pulses with 32-bit timer TC0 on pin 12
 #define P_PIN 12
 
+#ifdef USB_OFF
+#define SerialStd Serial1
+#else
+#define SerialStd Serial
+#endif 
+
 void setupTimer();
 
 
 void setup() {
   // Serial USB Port Output ///////////////////////////////////////////////////////////////////////////////
   
-  Serial.begin(115200);           // Open the native USB port at 115200 baud
-  while(!Serial);                 // Wait for the console to be opened
-  delay(1000);
-  Serial.print("Start P_PIN:");
-  Serial.println(P_PIN);
+  SerialStd.begin(115200);           // Open the native USB port at 115200 baud
+  while(!SerialStd);                 // Wait for the console to be opened
+  delay(1000);                       // Wait 1 sec to get serial ready
+  SerialStd.print("Start P_PIN:");
+  SerialStd.println(P_PIN);
   
-  Serial.print("g_APinDescription(P_PIN).ulPort:");
-  Serial.println(g_APinDescription[P_PIN].ulPin);
+  SerialStd.print("g_APinDescription(P_PIN).ulPort:");
+  SerialStd.println(g_APinDescription[P_PIN].ulPin);
 
   setupTimer();
   // Configure PIN 12 // PA22 
@@ -59,19 +64,27 @@ void setup() {
   PORT->Group[g_APinDescription[P_PIN].ulPort].PMUX[g_APinDescription[P_PIN].ulPin >> 1].reg |= PORT_PMUX_PMUXE(0);
   
 
+  // Set the Clock ////////////////////////////////////////////////////////////////////////////////
+
   // Manage the Ultra Low Power Clock Source on Gen clock 2 Add it to TC0
   GCLK->GENCTRL[2].bit.SRC            = 0x04; //  ADD VIB:Gen Clock 2 => p.166 GCLK Source: 0x04 is OSCULP32K oscillator output 
   GCLK->PCHCTRL[TC0_GCLK_ID].bit.GEN  = 2;    //   ADD VIB:p.168 Assign Peripheral Channel Control for TC2 to Generic Clock Generator 2 as above.
   GCLK->PCHCTRL[TC0_GCLK_ID].bit.CHEN = 1;    //   ADD VIB:p.167 "the peripheral channel is enabled"
   GCLK->GENCTRL[2].bit.GENEN          = 1;    //   ADD VIB:p.165 "generator is enabled"
 
-  EIC->CTRLA.bit.ENABLE = 0;                        // Disable the EIC peripheral
+
+  //GCLK->PCHCTRL[TC0_GCLK_ID].reg = GCLK_PCHCTRL_CHEN |         // Enable perhipheral channel for TC0
+  //                                 GCLK_PCHCTRL_GEN_GCLK2;     // Connect generic clock 0 at 120MHz
+  
+
+  // Event System ///////////////////////////////////////////////////////////////////////////////
+  EIC->CTRLA.bit.ENABLE = 0;                        // Disable the EIC peripheral to initiate configuration
   while (EIC->SYNCBUSY.bit.ENABLE);                 // Wait for synchronization 
-  EIC->CTRLA.bit.CKSEL=1;                           // ADD VIB: ULP CLK_ULP32K page 454
+  EIC->CTRLA.bit.CKSEL=1;                           // ADD VIB: to enable ULP32K this bit has to be set, ULP CLK_ULP32K page 454
 
   //CASE 1
   EIC->CONFIG[0].reg = EIC_CONFIG_SENSE6_LOW;      // Set event on detecting a HIGH level
-  EIC->CONFIG[0].bit.FILTEN7=1;                     // ADD VIB: add filter Majority Filter [1,1,0]=1 page 455
+  EIC->CONFIG[0].bit.FILTEN7=1;                    // ADD VIB: add filter Majority Filter [1,1,0]=1 page 455
 
   //CASE 2
   //EIC->CONFIG[0].reg = EIC_CONFIG_SENSE6_FALL;      // Set event on detecting a FALLLING EVENT
@@ -84,13 +97,8 @@ void setup() {
 
   // TC0 Count Timer //////////////////////////////////////////////////////////////////////////////////
 
-  //GCLK->PCHCTRL[TC0_GCLK_ID].reg = GCLK_PCHCTRL_CHEN |         // Enable perhipheral channel for TC0
-  //                                 GCLK_PCHCTRL_GEN_GCLK2;     // Connect generic clock 0 at 120MHz
-
   TC0->COUNT32.CTRLA.reg = TC_CTRLA_MODE_COUNT32;              // Set-up TC0/TC1 timers in 32-bit mode
   
-  // Event System ///////////////////////////////////////////////////////////////////////////////
-
   MCLK->APBBMASK.reg |= MCLK_APBBMASK_EVSYS;         // Switch on the event system peripheral
   
   // Select the event system user on channel 0 (USER number = channel number + 1)
@@ -167,14 +175,14 @@ void TC2_Handler() {
     TC2->COUNT32.COUNT.reg=0;               // Restart from 0; 
     while (TC0->COUNT32.SYNCBUSY.bit.COUNT);  
 
-    Serial.printf("*");
+    SerialStd.printf("*");
 }
 
 void loop() {
   TC0->COUNT32.CTRLBSET.reg = TC_CTRLBCLR_CMD_READSYNC;     // Initiate read synchronization of COUNT register
   while (TC0->COUNT32.SYNCBUSY.bit.CTRLB);                  // Wait for CTRLBSET register write synchronization
   while (TC0->COUNT32.SYNCBUSY.bit.COUNT);                  // Wait for COUNT register read synchronization
-  Serial.println(TC0->COUNT32.COUNT.reg);                   // Read and display the TC0 COUNT register 
+  SerialStd.println(TC0->COUNT32.COUNT.reg);                   // Read and display the TC0 COUNT register 
   //TC0->COUNT32.CTRLBSET.reg = TC_CTRLBCLR_CMD_RETRIGGER;    // Initiate timer reset
   //while (TC0->COUNT32.SYNCBUSY.bit.CTRLB);                  // Wait for CTRLBSET register write synchronization
   delay(1000);                                              // Wait a second
